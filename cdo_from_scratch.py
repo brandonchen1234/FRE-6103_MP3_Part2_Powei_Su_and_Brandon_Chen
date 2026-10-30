@@ -516,17 +516,23 @@ print(np.round(cov_matrix / 1_000_000**2, 4))
 # Part 2 - Default Indicator
 # -----------------------------
 
-default_indicator = (
+collateral_default_indicator = (
     default_quarters <= N_QUARTERS
 ).any(axis=1).astype(int)
 
-default_scenario_count = default_indicator.sum()
-default_scenario_probability = default_indicator.mean()
+default_scenario_count = collateral_default_indicator.sum()
+default_scenario_probability = collateral_default_indicator.mean()
 
-print("\nCollateral Default Indicator")
-print("----------------------------")
-print(f"Scenarios with at least one default: {default_scenario_count}")
-print(f"Probability of at least one default: {default_scenario_probability:.2%}")
+print("\nCollateral Bond Default Indicator")
+print("---------------------------------")
+print(
+    f"Scenarios with at least one collateral bond default: "
+    f"{default_scenario_count}"
+)
+print(
+    f"Probability of at least one collateral bond default: "
+    f"{default_scenario_probability:.2%}"
+)
 
 # -----------------------------
 # Part 2 - Step 4: Market Value of Underlying Bonds
@@ -846,8 +852,14 @@ def value_structure(class_B_notional):
     )
 
     # -----------------------------
-    # 7. Default / shortfall indicator
-    # -----------------------------
+# 7. CDO default / shortfall indicator
+# -----------------------------
+
+    A_interest_due_all = (
+        A_balance[:, :-1]
+        * CLASS_A_COUPON
+        / QUARTERS_PER_YEAR
+    )
 
     B_interest_due_all = (
         B_balance[:, :-1]
@@ -855,9 +867,19 @@ def value_structure(class_B_notional):
         / QUARTERS_PER_YEAR
     )
 
+    A_interest_shortfall = np.maximum(
+        A_interest_due_all - A_interest_cf,
+        0
+    )
+
     B_interest_shortfall = np.maximum(
         B_interest_due_all - B_interest_cf,
         0
+    )
+
+    A_default_indicator = (
+        (A_interest_shortfall.sum(axis=1) > 1e-6)
+        | (A_balance[:, -1] > 1e-6)
     )
 
     B_default_indicator = (
@@ -865,8 +887,13 @@ def value_structure(class_B_notional):
         | (B_balance[:, -1] > 1e-6)
     )
 
-    B_default_probability = (
-        B_default_indicator.mean()
+    CDO_default_indicator = (
+        A_default_indicator
+        | B_default_indicator
+    )
+
+    CDO_default_probability = (
+        CDO_default_indicator.mean()
     )
 
     # -----------------------------
@@ -878,19 +905,18 @@ def value_structure(class_B_notional):
     # and keeps the residual.
     #
 
-    bank_value = (
-        CLASS_A_NOTIONAL
-        + class_B_notional
-        + lintner_values[2]
-    )
+    # bank_value = (
+    #     CLASS_A_NOTIONAL
+    #     + class_B_notional
+    #     + lintner_values[2]
+    # )
 
     return {
-        "B Notional": class_B_notional,
-        "A Value": lintner_values[0],
-        "B Value": lintner_values[1],
-        "Residual Value": lintner_values[2],
-        "B Default Probability": B_default_probability,
-        "Bank Value": bank_value
+    "B Notional": class_B_notional,
+    "A Value": lintner_values[0],
+    "B Value": lintner_values[1],
+    "Residual Value": lintner_values[2],
+    "CDO Default Probability": CDO_default_probability
     }
 
 # -----------------------------
@@ -954,8 +980,8 @@ plot_df["B Premium MM"] = (
     - plot_df["B Notional"]
 ) / 1_000_000
 
-plot_df["B Default Probability %"] = (
-    plot_df["B Default Probability"] * 100
+plot_df["CDO Default Probability %"] = (
+    plot_df["CDO Default Probability"] * 100
 )
 
 # ------------------------------------------------------------
@@ -1004,7 +1030,7 @@ ax2 = ax1.twinx()
 
 ax2.plot(
     plot_df["B Notional MM"],
-    plot_df["B Default Probability %"],
+    plot_df["CDO Default Probability %"],
     linestyle=":",
     linewidth=2.5,
     label="CDO Default Indicator Frequency"
@@ -1064,8 +1090,7 @@ for col in [
     "B Notional",
     "A Value",
     "B Value",
-    "Residual Value",
-    "Bank Value"
+    "Residual Value"
 ]:
 
     optimization_display[col] = (
@@ -1088,7 +1113,7 @@ print(
 # -----------------------------
 
 zero_default_df = optimization_df[
-    optimization_df["B Default Probability"] == 0
+    optimization_df["CDO Default Probability"] == 0
 ].copy()
 
 best_zero_default_idx = (
@@ -1123,8 +1148,8 @@ print(
 )
 
 print(
-    f"B Default Probability: "
-    f"{best_zero_default['B Default Probability']:.2%}"
+    f"CDO Default Probability: "
+    f"{best_zero_default['CDO Default Probability']:.2%}"
 )
 
 # -----------------------------
@@ -1153,8 +1178,7 @@ for col in [
     "B Notional",
     "A Value",
     "B Value",
-    "Residual Value",
-    "Bank Value"
+    "Residual Value"
 ]:
     fine_display[col] = (
         fine_display[col] / 1_000_000
@@ -1168,14 +1192,14 @@ print(
             "B Notional",
             "B Value",
             "Residual Value",
-            "B Default Probability"
+            "CDO Default Probability"
         ]
     ].round(4).to_string(index=False)
 )
 
 # Maximum B with zero simulated default
 fine_zero_default = fine_df[
-    fine_df["B Default Probability"] == 0
+    fine_df["CDO Default Probability"] == 0
 ]
 
 best_fine_idx = (
@@ -1205,8 +1229,8 @@ print(
 )
 
 print(
-    f"B Default Probability: "
-    f"{best_fine['B Default Probability']:.2%}"
+    f"CDO Default Probability: "
+    f"{best_fine['CDO Default Probability']:.2%}"
 )
 
 # print("\nCase 1 - Class A Total CF:")
@@ -1769,18 +1793,18 @@ plt.savefig(
 
 plt.close()
 
-while True:
+# while True:
 
-    user_input = input(
-        "\nEnter a case number (1-1000), or 'q' to quit: "
-    )
+#     user_input = input(
+#         "\nEnter a case number (1-1000), or 'q' to quit: "
+#     )
 
-    if user_input.lower() == "q":
-        break
+#     if user_input.lower() == "q":
+#         break
 
-    try:
-        case_num = int(user_input)
-        view_case(case_num)
+#     try:
+#         case_num = int(user_input)
+#         view_case(case_num)
 
-    except ValueError:
-        print("Please enter a valid case number from 1 to 1000.")
+#     except ValueError:
+#         print("Please enter a valid case number from 1 to 1000.")
