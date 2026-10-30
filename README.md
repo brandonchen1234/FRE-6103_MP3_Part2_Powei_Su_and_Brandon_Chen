@@ -22,6 +22,8 @@ Collateral interest cash flows are used first to pay Class A interest, then Clas
 * **Task 2.** Apply the waterfall rules to determine the cash flow patterns to each class.
 * **Task 3.** Provide a statistical analysis of the cash flows (both the collateral and the classes) in a report suitable for a bank client. Be sure to include probability distributions of the outcomes, and key sensitivities to the parameters.
   
+
+
 # Mini-Project 3B: CDO Valuation Using the Lintner Model
 
 **FRE 6103 – Valuation for Financial Engineers** | Prof. David Shimko | Oct 2026
